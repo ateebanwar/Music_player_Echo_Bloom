@@ -3,6 +3,7 @@ import 'package:sound_foundry/core/result/result.dart';
 import 'package:sound_foundry/core/types/pagination.dart';
 import 'package:sound_foundry/domain/entities/album.dart';
 import 'package:sound_foundry/domain/entities/artist.dart';
+import 'package:sound_foundry/domain/entities/playlist.dart';
 import 'package:sound_foundry/domain/entities/track.dart';
 
 /// Contract for track catalog access and manipulation.
@@ -24,20 +25,27 @@ abstract class TrackRepository {
   /// Resolves playable stream URL for a remote track if needed.
   Future<String> resolveStreamUri(String trackIdOrUri, [Track? track]);
 
-  /// Retrieves all artists.
-  Future<Result<List<Artist>, Failure>> getArtists();
+  /// Retrieves artists (local storage, and optionally remote discovery if query supplied).
+  Future<Result<List<Artist>, Failure>> getArtists([String? query]);
 
-  /// Retrieves all albums.
-  Future<Result<List<Album>, Failure>> getAlbums();
+  /// Retrieves albums (local storage, and optionally remote discovery if query supplied).
+  Future<Result<List<Album>, Failure>> getAlbums([String? query]);
 
   /// Retrieves tracks belonging to a specific artist.
   Future<Result<List<Track>, Failure>> getTracksByArtist(String artistName);
 
-  /// Retrieves tracks belonging to a specific album.
+  /// Retrieves tracks belonging to a specific album or album URL.
   Future<Result<List<Track>, Failure>> getTracksByAlbum(String albumName);
+
+  /// Retrieves curated remote discovery playlists (1990s Hindi, Romantic, Pop, etc.).
+  Future<Result<List<Playlist>, Failure>> getDiscoveryPlaylists();
+
+  /// Retrieves tracks for a discovery playlist.
+  Future<Result<List<Track>, Failure>> getDiscoveryPlaylistTracks(String playlistIdOrQuery);
 
   /// Retrieves favorite tracks.
   Future<Result<List<Track>, Failure>> getFavoriteTracks();
+
 
   /// Retrieves downloaded offline tracks.
   Future<Result<List<Track>, Failure>> getDownloadedTracks();

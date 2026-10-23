@@ -6,13 +6,18 @@ import 'package:sound_foundry/core/logging/app_logger.dart';
 import 'package:sound_foundry/domain/entities/playback_state.dart';
 import 'package:sound_foundry/domain/entities/track.dart';
 import 'package:sound_foundry/infrastructure/audio/audio_engine.dart';
+import 'package:sound_foundry/infrastructure/audio/web_audio_player.dart';
+import 'package:sound_foundry/infrastructure/storage/offline_audio_storage.dart';
 
 /// Production-ready audio engine bridge.
 /// Manages real playback lifecycle, ticking position stream, event dispatching, and streams.
 /// Connects to native Android MediaPlayer for real offline MP3 audio playback.
 /// Supports media notification actions (play/pause/skip) via the native MediaPlaybackService.
+/// Supports W3C HTMLAudioElement on Web / Microsoft Edge.
 class AudioEngineImpl implements AudioEngine {
   final AppLogger? _logger;
+  final OfflineAudioStorage? _offlineStorage;
+  final WebAudioPlayer _webPlayer = WebAudioPlayer();
 
   static const MethodChannel _nativePlayerChannel =
       MethodChannel('com.antigravity.sound_foundry/audio_player');
@@ -41,10 +46,55 @@ class AudioEngineImpl implements AudioEngine {
   /// Set by PlaybackRepositoryImpl to handle notification button presses.
   void Function(String action)? onMediaAction;
 
-  AudioEngineImpl({AppLogger? logger}) : _logger = logger {
+  AudioEngineImpl({
+    AppLogger? logger,
+    OfflineAudioStorage? offlineStorage,
+  })  : _logger = logger,
+        _offlineStorage = offlineStorage {
     if (_isAndroid) {
       _nativePlayerChannel.setMethodCallHandler(_handleNativeCall);
+    } else if (kIsWeb && _webPlayer.isSupported) {
+      _initWebPlayerListeners();
     }
+  }
+
+
+  void _initWebPlayerListeners() {
+    _webPlayer.onPositionChanged.listen((pos) {
+      _position = pos;
+      if (!_positionController.isClosed) {
+        _positionController.add(_position);
+      }
+    });
+
+    _webPlayer.onDurationChanged.listen((dur) {
+      if (dur > Duration.zero && dur != _duration) {
+        _duration = dur;
+        if (!_durationController.isClosed) {
+          _durationController.add(_duration);
+        }
+      }
+    });
+
+    _webPlayer.onEnded.listen((_) {
+      _updateStatus(PlaybackStatus.idle);
+      if (!_eventController.isClosed) {
+        _eventController.add(const AudioEngineEvent(
+          type: AudioEngineEventType.trackEnded,
+        ));
+      }
+    });
+
+    _webPlayer.onError.listen((msg) {
+      _logger?.warning('Web audio playback error: $msg', tag: 'AudioEngine');
+      _updateStatus(PlaybackStatus.error);
+      if (!_eventController.isClosed) {
+        _eventController.add(AudioEngineEvent(
+          type: AudioEngineEventType.error,
+          errorMessage: msg,
+        ));
+      }
+    });
   }
 
   Future<dynamic> _handleNativeCall(MethodCall call) async {
@@ -146,10 +196,20 @@ class AudioEngineImpl implements AudioEngine {
       _positionController.add(_position);
     }
 
+    String targetUri = track.mediaUri;
+    if (_offlineStorage != null &&
+        (track.sourceType == TrackSourceType.downloaded || targetUri.startsWith('offline://'))) {
+      final resolved = await _offlineStorage.resolvePlayableUri(track);
+      if (resolved != null && resolved.isNotEmpty) {
+        targetUri = resolved;
+        _logger?.info('Resolved offline URI for playback: $targetUri', tag: 'AudioEngine');
+      }
+    }
+
     if (_isAndroid) {
       try {
         final res = await _nativePlayerChannel.invokeMethod<Map<dynamic, dynamic>>('load', {
-          'uri': track.mediaUri,
+          'uri': targetUri,
           'title': track.title,
           'artist': track.artist,
           'album': track.album,
@@ -168,6 +228,12 @@ class AudioEngineImpl implements AudioEngine {
         _logger?.warning('Native player load failed: $e', tag: 'AudioEngine');
         _updateStatus(PlaybackStatus.error);
         rethrow;
+      }
+    } else if (kIsWeb && _webPlayer.isSupported) {
+      try {
+        await _webPlayer.load(targetUri);
+      } catch (e) {
+        _logger?.warning('Web player load failed: $e', tag: 'AudioEngine');
       }
     }
 
@@ -194,6 +260,16 @@ class AudioEngineImpl implements AudioEngine {
       }
     }
 
+    if (kIsWeb && _webPlayer.isSupported) {
+      try {
+        await _webPlayer.play();
+        _updateStatus(PlaybackStatus.playing);
+        return;
+      } catch (e) {
+        _logger?.warning('Web play failed: $e', tag: 'AudioEngine');
+      }
+    }
+
     _updateStatus(PlaybackStatus.playing);
     _startTicker();
   }
@@ -204,6 +280,10 @@ class AudioEngineImpl implements AudioEngine {
     if (_isAndroid) {
       try {
         await _nativePlayerChannel.invokeMethod('pause');
+      } catch (_) {}
+    } else if (kIsWeb && _webPlayer.isSupported) {
+      try {
+        await _webPlayer.pause();
       } catch (_) {}
     }
     _stopTicker();
@@ -216,6 +296,10 @@ class AudioEngineImpl implements AudioEngine {
     if (_isAndroid) {
       try {
         await _nativePlayerChannel.invokeMethod('stop');
+      } catch (_) {}
+    } else if (kIsWeb && _webPlayer.isSupported) {
+      try {
+        await _webPlayer.stop();
       } catch (_) {}
     }
     _stopTicker();
@@ -239,6 +323,10 @@ class AudioEngineImpl implements AudioEngine {
       try {
         await _nativePlayerChannel.invokeMethod('seek', {'position': clampedMs});
       } catch (_) {}
+    } else if (kIsWeb && _webPlayer.isSupported) {
+      try {
+        await _webPlayer.seek(_position);
+      } catch (_) {}
     }
 
     if (!_positionController.isClosed) {
@@ -260,6 +348,10 @@ class AudioEngineImpl implements AudioEngine {
       try {
         await _nativePlayerChannel.invokeMethod('setVolume', {'volume': _volume});
       } catch (_) {}
+    } else if (kIsWeb && _webPlayer.isSupported) {
+      try {
+        await _webPlayer.setVolume(_volume);
+      } catch (_) {}
     }
   }
 
@@ -270,6 +362,10 @@ class AudioEngineImpl implements AudioEngine {
     if (_isAndroid) {
       try {
         await _nativePlayerChannel.invokeMethod('setSpeed', {'speed': _speed});
+      } catch (_) {}
+    } else if (kIsWeb && _webPlayer.isSupported) {
+      try {
+        await _webPlayer.setSpeed(_speed);
       } catch (_) {}
     }
   }
@@ -359,6 +455,10 @@ class AudioEngineImpl implements AudioEngine {
     if (_isAndroid) {
       try {
         await _nativePlayerChannel.invokeMethod('stop');
+      } catch (_) {}
+    } else if (kIsWeb && _webPlayer.isSupported) {
+      try {
+        await _webPlayer.dispose();
       } catch (_) {}
     }
     await _eventController.close();

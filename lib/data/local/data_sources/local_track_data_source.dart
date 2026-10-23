@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:sound_foundry/core/types/pagination.dart';
 import 'package:sound_foundry/data/local/database/app_database.dart';
 import 'package:sound_foundry/data/mappers/track_mapper.dart';
@@ -190,11 +191,22 @@ class LocalTrackDataSource {
             ? track.copyWith(isFavorite: isFav)
             : track;
 
-        batch.insert(
-          'tracks',
-          TrackMapper.toDbMap(trackToSave),
-          conflictAlgorithm: ConflictAlgorithm.replace,
-        );
+        final map = TrackMapper.toDbMap(trackToSave);
+        final existing = await txn.query('tracks', columns: ['id'], where: 'id = ?', whereArgs: [trackToSave.id]);
+        if (existing.isNotEmpty) {
+          batch.update(
+            'tracks',
+            map,
+            where: 'id = ?',
+            whereArgs: [trackToSave.id],
+          );
+        } else {
+          batch.insert(
+            'tracks',
+            map,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+        }
       }
       final results = await batch.commit(noResult: false);
       count = results.length;
@@ -234,7 +246,9 @@ class LocalTrackDataSource {
     final staleIds = <String>[];
 
     for (final track in tracks) {
-      if (File(track.mediaUri).existsSync()) {
+      if (kIsWeb || track.mediaUri.startsWith('blob:') || track.mediaUri.startsWith('offline://')) {
+        validTracks.add(track);
+      } else if (File(track.mediaUri).existsSync()) {
         validTracks.add(track);
       } else {
         staleIds.add(track.id);

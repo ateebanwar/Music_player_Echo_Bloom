@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:sound_foundry/core/errors/failures.dart';
 import 'package:sound_foundry/core/result/result.dart';
 import 'package:sound_foundry/domain/entities/app_mode.dart';

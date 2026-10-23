@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:equatable/equatable.dart';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sound_foundry/app/bootstrap/dependency_bootstrap.dart';
 import 'package:sound_foundry/domain/entities/app_mode.dart';

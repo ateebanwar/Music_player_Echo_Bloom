@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:sound_foundry/core/theme/app_colors.dart';
 import 'package:sound_foundry/core/theme/app_spacing.dart';
 import 'package:sound_foundry/core/theme/neumorphic_decorations.dart';

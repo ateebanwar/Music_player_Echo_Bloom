@@ -7,6 +7,7 @@ import 'package:sound_foundry/data/local/data_sources/local_track_data_source.da
 import 'package:sound_foundry/data/remote/contracts/remote_music_data_source.dart';
 import 'package:sound_foundry/domain/entities/album.dart';
 import 'package:sound_foundry/domain/entities/artist.dart';
+import 'package:sound_foundry/domain/entities/playlist.dart';
 import 'package:sound_foundry/domain/entities/track.dart';
 import 'package:sound_foundry/domain/repositories/track_repository.dart';
 
@@ -99,10 +100,21 @@ class TrackRepositoryImpl implements TrackRepository {
   }
 
   @override
-  Future<Result<List<Artist>, Failure>> getArtists() async {
+  Future<Result<List<Artist>, Failure>> getArtists([String? query]) async {
     try {
-      final artists = await _localDataSource.getArtists();
-      return Result.ok(artists);
+      final localArtists = await _localDataSource.getArtists();
+      if (query != null && query.trim().isNotEmpty && _remoteDataSource != null) {
+        final remoteArtists = await _remoteDataSource.fetchArtists(query);
+        final combined = [...localArtists];
+        final names = combined.map((a) => a.name.toLowerCase()).toSet();
+        for (final r in remoteArtists) {
+          if (!names.contains(r.name.toLowerCase())) {
+            combined.add(r);
+          }
+        }
+        return Result.ok(combined);
+      }
+      return Result.ok(localArtists);
     } catch (e, stack) {
       _logger?.error('Error fetching artists', tag: 'TrackRepository', error: e, stackTrace: stack);
       return Result.err(StorageFailure(message: 'Failed to get artists: $e', cause: e));
@@ -110,10 +122,21 @@ class TrackRepositoryImpl implements TrackRepository {
   }
 
   @override
-  Future<Result<List<Album>, Failure>> getAlbums() async {
+  Future<Result<List<Album>, Failure>> getAlbums([String? query]) async {
     try {
-      final albums = await _localDataSource.getAlbums();
-      return Result.ok(albums);
+      final localAlbums = await _localDataSource.getAlbums();
+      if (query != null && query.trim().isNotEmpty && _remoteDataSource != null) {
+        final remoteAlbums = await _remoteDataSource.fetchAlbums(query);
+        final combined = [...localAlbums];
+        final titles = combined.map((a) => a.title.toLowerCase()).toSet();
+        for (final r in remoteAlbums) {
+          if (!titles.contains(r.title.toLowerCase())) {
+            combined.add(r);
+          }
+        }
+        return Result.ok(combined);
+      }
+      return Result.ok(localAlbums);
     } catch (e, stack) {
       _logger?.error('Error fetching albums', tag: 'TrackRepository', error: e, stackTrace: stack);
       return Result.err(StorageFailure(message: 'Failed to get albums: $e', cause: e));
@@ -123,8 +146,19 @@ class TrackRepositoryImpl implements TrackRepository {
   @override
   Future<Result<List<Track>, Failure>> getTracksByArtist(String artistName) async {
     try {
-      final tracks = await _localDataSource.getTracksByArtist(artistName);
-      return Result.ok(tracks);
+      final localTracks = await _localDataSource.getTracksByArtist(artistName);
+      if (localTracks.isNotEmpty) {
+        return Result.ok(localTracks);
+      }
+
+      if (_remoteDataSource != null) {
+        final remoteTracks = await _remoteDataSource.searchRemoteCatalog(artistName);
+        if (remoteTracks.isNotEmpty) {
+          return Result.ok(remoteTracks);
+        }
+      }
+
+      return Result.ok(localTracks);
     } catch (e, stack) {
       _logger?.error('Error fetching tracks by artist', tag: 'TrackRepository', error: e, stackTrace: stack);
       return Result.err(StorageFailure(message: 'Failed to get artist tracks: $e', cause: e));
@@ -134,11 +168,55 @@ class TrackRepositoryImpl implements TrackRepository {
   @override
   Future<Result<List<Track>, Failure>> getTracksByAlbum(String albumName) async {
     try {
-      final tracks = await _localDataSource.getTracksByAlbum(albumName);
-      return Result.ok(tracks);
+      if (albumName.startsWith('http://') || albumName.startsWith('https://')) {
+        if (_remoteDataSource != null) {
+          final tracks = await _remoteDataSource.fetchAlbumTracks(albumName);
+          return Result.ok(tracks);
+        }
+      }
+
+      final localTracks = await _localDataSource.getTracksByAlbum(albumName);
+      if (localTracks.isNotEmpty) {
+        return Result.ok(localTracks);
+      }
+
+      if (_remoteDataSource != null) {
+        final remoteTracks = await _remoteDataSource.fetchAlbumTracks(albumName);
+        return Result.ok(remoteTracks);
+      }
+
+      return Result.ok(localTracks);
     } catch (e, stack) {
       _logger?.error('Error fetching tracks by album', tag: 'TrackRepository', error: e, stackTrace: stack);
       return Result.err(StorageFailure(message: 'Failed to get album tracks: $e', cause: e));
+    }
+  }
+
+  @override
+  Future<Result<List<Playlist>, Failure>> getDiscoveryPlaylists() async {
+    if (_remoteDataSource == null) {
+      return const Result.ok([]);
+    }
+    try {
+      final playlists = await _remoteDataSource.fetchDiscoveryPlaylists();
+      return Result.ok(playlists);
+    } catch (e, stack) {
+      _logger?.error('Error fetching discovery playlists', tag: 'TrackRepository', error: e, stackTrace: stack);
+      return Result.err(NetworkFailure(message: 'Failed to fetch discovery playlists: $e', cause: e));
+    }
+  }
+
+  @override
+  Future<Result<List<Track>, Failure>> getDiscoveryPlaylistTracks(String playlistIdOrQuery) async {
+    if (_remoteDataSource == null) {
+      return const Result.ok([]);
+    }
+    try {
+      final tracks = await _remoteDataSource.fetchPlaylistTracks(playlistIdOrQuery);
+      return Result.ok(tracks);
+    } catch (e, stack) {
+      _logger?.error('Error fetching discovery playlist tracks', tag: 'TrackRepository', error: e, stackTrace: stack);
+      return Result.err(NetworkFailure(message: 'Failed to load playlist tracks: $e', cause: e));
     }
   }
 

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sound_foundry/domain/entities/playback_state.dart';
 import 'package:sound_foundry/domain/entities/track.dart';

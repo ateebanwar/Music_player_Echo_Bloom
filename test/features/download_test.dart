@@ -6,9 +6,12 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
+import 'package:sound_foundry/data/local/data_sources/downloaded_playlist_data_source.dart';
 import 'package:sound_foundry/data/local/data_sources/local_track_data_source.dart';
 import 'package:sound_foundry/data/local/database/app_database.dart';
 import 'package:sound_foundry/data/repositories/track_repository_impl.dart';
+import 'package:sound_foundry/domain/entities/downloaded_playlist.dart';
+import 'package:sound_foundry/domain/entities/playlist.dart';
 import 'package:sound_foundry/domain/entities/track.dart';
 import 'package:sound_foundry/features/download/download_controller.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -170,6 +173,99 @@ void main() {
       // Reloading downloaded tracks should safely clean up stale database entry
       await controller.loadDownloadedTracks();
       expect(controller.state.downloadedTracks.isEmpty, isTrue);
+
+      controller.dispose();
+    });
+
+    test('Downloading an entire playlist creates a playlist collection and tracks progress', () async {
+      final downloadedPlaylistDs = DownloadedPlaylistDataSource(appDatabase: appDb);
+      final dummyAudioBytes = List<int>.filled(2048, 42);
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(dummyAudioBytes, 200);
+      });
+
+      final controller = DownloadController(
+        trackRepo,
+        client: mockClient,
+        downloadedPlaylistDataSource: downloadedPlaylistDs,
+      );
+
+      final track2 = Track(
+        id: 'jiosaavn_test456',
+        title: 'Channa Mereya',
+        artist: 'Arijit Singh',
+        album: 'Ae Dil Hai Mushkil',
+        duration: const Duration(minutes: 4, seconds: 49),
+        mediaUri: 'https://aac.saavncdn.com/stream/test456.mp4',
+        sourceType: TrackSourceType.remoteStream,
+        dateAdded: DateTime(2026, 1, 1),
+      );
+
+      final playlist = Playlist(
+        id: 'discovery_hindi_90s',
+        name: '1990s Hindi Hits',
+        trackCount: 2,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+
+      final result = await controller.downloadPlaylist(playlist, [sampleOnlineTrack, track2]);
+      expect(result, isTrue);
+
+      final playlists = controller.state.downloadedPlaylists;
+      expect(playlists.length, equals(1));
+      expect(playlists.first.name, equals('1990s Hindi Hits'));
+      expect(playlists.first.status, equals(DownloadPlaylistStatus.downloaded));
+      expect(controller.state.playlistProgress[playlist.id], equals('2/2 downloaded'));
+
+      // Verify offline tracks in playlist
+      final tracksInPl = await downloadedPlaylistDs.getDownloadedPlaylistTracks(playlist.id);
+      expect(tracksInPl.length, equals(2));
+
+      controller.dispose();
+    });
+
+    test('Removing a downloaded playlist does not delete audio file if track is referenced elsewhere', () async {
+      final downloadedPlaylistDs = DownloadedPlaylistDataSource(appDatabase: appDb);
+      final dummyAudioBytes = List<int>.filled(2048, 42);
+      final mockClient = MockClient((request) async {
+        return http.Response.bytes(dummyAudioBytes, 200);
+      });
+
+      final controller = DownloadController(
+        trackRepo,
+        client: mockClient,
+        downloadedPlaylistDataSource: downloadedPlaylistDs,
+      );
+
+      final playlist1 = Playlist(
+        id: 'pl_1',
+        name: 'Playlist One',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+      final playlist2 = Playlist(
+        id: 'pl_2',
+        name: 'Playlist Two',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+
+      // Download track into both playlists
+      await controller.downloadPlaylist(playlist1, [sampleOnlineTrack]);
+      await controller.downloadPlaylist(playlist2, [sampleOnlineTrack]);
+
+      final downloadedTrack = controller.state.downloadedTracks.first;
+      final localFilePath = downloadedTrack.mediaUri;
+      expect(File(localFilePath).existsSync(), isTrue);
+
+      // Delete playlist1 - file should remain because playlist2 still references it!
+      await controller.deleteDownloadedPlaylist('pl_1');
+      expect(File(localFilePath).existsSync(), isTrue);
+
+      // Now delete playlist2 - file should now be deleted since no more references exist
+      await controller.deleteDownloadedPlaylist('pl_2');
+      expect(File(localFilePath).existsSync(), isFalse);
 
       controller.dispose();
     });

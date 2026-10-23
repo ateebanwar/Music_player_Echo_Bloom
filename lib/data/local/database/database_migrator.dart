@@ -3,6 +3,7 @@ import 'package:sound_foundry/core/logging/app_logger.dart';
 import 'package:sound_foundry/data/local/database/migration.dart';
 import 'package:sound_foundry/data/local/database/migrations/v1_initial_schema.dart';
 import 'package:sound_foundry/data/local/database/migrations/v2_online_tracks_schema.dart';
+import 'package:sound_foundry/data/local/database/migrations/v3_downloaded_playlists_schema.dart';
 import 'package:sqflite/sqflite.dart';
 
 /// Coordinates execution of versioned database migrations.
@@ -14,7 +15,11 @@ class DatabaseMigrator {
   DatabaseMigrator({
     List<Migration>? migrations,
     AppLogger? logger,
-  })  : _migrations = migrations ?? [V1InitialSchema(), V2OnlineTracksSchema()],
+  })  : _migrations = migrations ?? [
+          V1InitialSchema(),
+          V2OnlineTracksSchema(),
+          V3DownloadedPlaylistsSchema(),
+        ],
         _logger = logger;
 
   int get latestVersion =>

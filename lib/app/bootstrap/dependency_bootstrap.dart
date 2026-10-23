@@ -28,7 +28,9 @@ import 'package:sound_foundry/infrastructure/audio/audio_engine_impl.dart';
 import 'package:sound_foundry/infrastructure/audio/audio_focus_manager.dart';
 import 'package:sound_foundry/infrastructure/permissions/permission_service.dart';
 import 'package:sound_foundry/infrastructure/platform/media_scanner.dart';
+import 'package:sound_foundry/data/local/data_sources/downloaded_playlist_data_source.dart';
 import 'package:sound_foundry/infrastructure/storage/key_value_store.dart';
+import 'package:sound_foundry/infrastructure/storage/offline_audio_storage.dart';
 
 // --- Core Providers ---
 
@@ -59,9 +61,24 @@ final keyValueStoreProvider = Provider<KeyValueStore>((ref) {
   return SqliteKeyValueStore(db);
 });
 
+final offlineAudioStorageProvider = Provider<OfflineAudioStorage>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final logger = ref.watch(loggerProvider);
+  final storage = OfflineAudioStorage(appDatabase: db, logger: logger);
+  ref.onDispose(storage.dispose);
+  return storage;
+});
+
+final downloadedPlaylistDataSourceProvider = Provider<DownloadedPlaylistDataSource>((ref) {
+  final db = ref.watch(appDatabaseProvider);
+  final logger = ref.watch(loggerProvider);
+  return DownloadedPlaylistDataSource(appDatabase: db, logger: logger);
+});
+
 final audioEngineProvider = Provider<AudioEngine>((ref) {
   final logger = ref.watch(loggerProvider);
-  final engine = AudioEngineImpl(logger: logger);
+  final offlineStorage = ref.watch(offlineAudioStorageProvider);
+  final engine = AudioEngineImpl(logger: logger, offlineStorage: offlineStorage);
   ref.onDispose(engine.dispose);
   return engine;
 });

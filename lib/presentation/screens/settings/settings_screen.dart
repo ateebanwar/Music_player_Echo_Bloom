@@ -216,7 +216,10 @@ class SettingsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      child: child,
+      child: Material(
+        color: Colors.transparent,
+        child: child,
+      ),
     );
   }
 }

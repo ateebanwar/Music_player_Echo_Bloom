@@ -13,7 +13,42 @@ import 'package:sound_foundry/presentation/widgets/custom_icons.dart';
 import 'package:sound_foundry/presentation/widgets/track_artwork_widget.dart';
 
 /// Context menu for track actions in Now Playing and song-list views with theme adaptivity.
-class SongContextMenu {
+class SongContextMenu extends ConsumerWidget {
+  final Track track;
+  final bool? isFavorite;
+  final bool isNowPlayingContext;
+
+  const SongContextMenu({
+    super.key,
+    required this.track,
+    this.isFavorite,
+    this.isNowPlayingContext = false,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isFav = isFavorite ?? ref.watch(favoritesControllerProvider).favorites.any((f) => f.id == track.id);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => show(
+        context: context,
+        ref: ref,
+        track: track,
+        isNowPlayingContext: isNowPlayingContext,
+        isFavorite: isFav,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(8.0),
+        child: CustomIcons.moreVertical(
+          size: 18.0,
+          color: isDark ? AppColors.darkTextMuted : AppColors.iconNavy.withValues(alpha: 0.6),
+        ),
+      ),
+    );
+  }
+
   static void show({
     required BuildContext context,
     required WidgetRef ref,
@@ -23,6 +58,7 @@ class SongContextMenu {
   }) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final iconColor = isDark ? AppColors.darkIcon : AppColors.iconNavy;
+
 
     showModalBottomSheet<void>(
       context: context,
@@ -273,19 +309,22 @@ class SongContextMenu {
     required VoidCallback onTap,
     required bool isDark,
   }) {
-    return ListTile(
-      dense: true,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
-      leading: SizedBox(width: 28.0, height: 28.0, child: Center(child: icon)),
-      title: Text(
-        title,
-        style: AppTypography.headerTitle.copyWith(
-          fontSize: 15.0,
-          fontWeight: FontWeight.w500,
-          color: isDark ? AppColors.darkText : AppColors.textNavy,
+    return Material(
+      color: Colors.transparent,
+      child: ListTile(
+        dense: true,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+        leading: SizedBox(width: 28.0, height: 28.0, child: Center(child: icon)),
+        title: Text(
+          title,
+          style: AppTypography.headerTitle.copyWith(
+            fontSize: 15.0,
+            fontWeight: FontWeight.w500,
+            color: isDark ? AppColors.darkText : AppColors.textNavy,
+          ),
         ),
+        onTap: onTap,
       ),
-      onTap: onTap,
     );
   }
 
@@ -392,47 +431,50 @@ class SongContextMenu {
                   ),
                 )
               else
-                ...playlists.map((playlist) => ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 4.0),
-                      leading: Container(
-                        width: 40.0,
-                        height: 40.0,
-                        decoration: BoxDecoration(
-                          color: isDark ? AppColors.darkCapsule : AppColors.capsuleActiveSurface,
-                          borderRadius: BorderRadius.circular(10.0),
+                ...playlists.map((playlist) => Material(
+                      color: Colors.transparent,
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 4.0),
+                        leading: Container(
+                          width: 40.0,
+                          height: 40.0,
+                          decoration: BoxDecoration(
+                            color: isDark ? AppColors.darkCapsule : AppColors.capsuleActiveSurface,
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          child: Center(
+                            child: CustomIcons.playlistGrid(size: 18.0, color: AppColors.primaryPurple),
+                          ),
                         ),
-                        child: Center(
-                          child: CustomIcons.playlistGrid(size: 18.0, color: AppColors.primaryPurple),
+                        title: Text(
+                          playlist.name,
+                          style: AppTypography.headerTitle.copyWith(
+                            fontSize: 15.0,
+                            color: isDark ? AppColors.darkText : AppColors.textNavy,
+                          ),
                         ),
+                        subtitle: Text(
+                          '${playlist.trackCount} tracks',
+                          style: AppTypography.artistName.copyWith(
+                            fontSize: 12.0,
+                            color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
+                          ),
+                        ),
+                        onTap: () async {
+                          Navigator.pop(sheetCtx);
+                          final success = await ref
+                              .read(playlistControllerProvider.notifier)
+                              .addTrackToPlaylist(playlist.id, track);
+                          if (context.mounted) {
+                            _showFeedback(
+                              context,
+                              success
+                                  ? 'Added "${track.title}" to ${playlist.name}'
+                                  : 'Could not add to playlist',
+                            );
+                          }
+                        },
                       ),
-                      title: Text(
-                        playlist.name,
-                        style: AppTypography.headerTitle.copyWith(
-                          fontSize: 15.0,
-                          color: isDark ? AppColors.darkText : AppColors.textNavy,
-                        ),
-                      ),
-                      subtitle: Text(
-                        '${playlist.trackCount} tracks',
-                        style: AppTypography.artistName.copyWith(
-                          fontSize: 12.0,
-                          color: isDark ? AppColors.darkTextMuted : AppColors.textMuted,
-                        ),
-                      ),
-                      onTap: () async {
-                        Navigator.pop(sheetCtx);
-                        final success = await ref
-                            .read(playlistControllerProvider.notifier)
-                            .addTrackToPlaylist(playlist.id, track);
-                        if (context.mounted) {
-                          _showFeedback(
-                            context,
-                            success
-                                ? 'Added "${track.title}" to ${playlist.name}'
-                                : 'Could not add to playlist',
-                          );
-                        }
-                      },
                     )),
             ],
           ),

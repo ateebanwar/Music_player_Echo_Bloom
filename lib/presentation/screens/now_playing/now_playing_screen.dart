@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sound_foundry/app/bootstrap/dependency_bootstrap.dart';
 import 'package:sound_foundry/core/theme/app_colors.dart';

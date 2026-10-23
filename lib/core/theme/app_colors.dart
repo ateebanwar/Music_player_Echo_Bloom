@@ -63,6 +63,9 @@ abstract final class AppColors {
   static const Color favoriteRed = Color(0xFFE53935);
   static const Color errorRed = Color(0xFFE53935);
   static const Color successGreen = Color(0xFF65B995);
+  static const Color accentGreen = successGreen;
+  static const Color accentRed = favoriteRed;
+
 
   // Light Neumorphic Shadows (Soft white highlight + subtle botanical shadow)
   static const Color shadowLight = Color(0xFFFFFFFF);

@@ -10,6 +10,7 @@ class TrackArtworkWidget extends StatelessWidget {
   final double borderRadius;
   final IconData? fallbackIcon;
   final double iconSize;
+  final bool? isDark;
 
   const TrackArtworkWidget({
     super.key,
@@ -18,7 +19,9 @@ class TrackArtworkWidget extends StatelessWidget {
     this.borderRadius = 12.0,
     this.fallbackIcon,
     this.iconSize = 20.0,
+    this.isDark,
   });
+
 
   @override
   Widget build(BuildContext context) {
