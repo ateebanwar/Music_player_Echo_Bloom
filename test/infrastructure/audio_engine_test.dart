@@ -86,7 +86,12 @@ void main() {
       await audioEngine.load(shortTrack);
       await audioEngine.play();
 
-      await Future<void>.delayed(const Duration(milliseconds: 160));
+      for (int i = 0; i < 15; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+        if (events.any((e) => e.type == AudioEngineEventType.trackEnded)) {
+          break;
+        }
+      }
 
       expect(
         events.any((e) => e.type == AudioEngineEventType.trackEnded),
